@@ -255,55 +255,54 @@ class WebServer {
 
 
           try {
-            // Extract the query from the request and fetch data from GitHub API
             Map<String, String> query_pairs = new LinkedHashMap<String, String>();
             query_pairs = splitQuery(request.replace("github?", ""));
             String json = fetchURL("https://api.github.com/" + query_pairs.get("query"));
             System.out.println(json);
 
 
+            JSONArray repoArray = new JSONArray(json);
 
-            // Parse JSON response
-            JSONArray reposArray = new JSONArray(json);
+            StringBuilder stringBuilder = new StringBuilder();
+            stringBuilder.append("HTTP/1.1 200 OK\n");
+            stringBuilder.append("Content-Type: text/html; charset=utf-8\n");
+            stringBuilder.append("\n");
 
-            // Prepare response
-            StringBuilder responseBuilder = new StringBuilder();
-            responseBuilder.append("HTTP/1.1 200 OK\n");
-            responseBuilder.append("Content-Type: text/html; charset=utf-8\n");
-            responseBuilder.append("\n");
+            for (int i = 0; i < repoArray.length(); i++) {
 
-            // Iterate through each repository and extract relevant information
-            for (int i = 0; i < reposArray.length(); i++) {
-              JSONObject repo = reposArray.getJSONObject(i);
+              JSONObject repo = repoArray.getJSONObject(i);
+
               String fullName = repo.getString("full_name");
-              int id = repo.getInt("id");
-              JSONObject owner = repo.getJSONObject("owner");
-              String ownerLogin = owner.getString("login");
 
-              // Append repository information to the response
-              responseBuilder.append("Repository: ").append(fullName).append("<br>");
-              responseBuilder.append("ID: ").append(id).append("<br>");
-              responseBuilder.append("Owner: ").append(ownerLogin).append("<br><br>");
+              int ID = repo.getInt("id");
+
+              JSONObject owner = repo.getJSONObject("owner");
+
+
+              String login = owner.getString("login");
+
+              stringBuilder.append("Repository: ").append(fullName).append("<br>");
+
+              stringBuilder.append("ID: ").append(ID).append("<br>");
+
+              stringBuilder.append("Owner: ").append(login).append("<br><br>");
             }
 
-            // Send the response
-            builder.append(responseBuilder.toString());
-          } catch (JSONException e) {
-            // Handle JSON parsing error
-            builder.append("HTTP/1.1 500 Internal Server Error\n");
-            builder.append("Content-Type: text/html; charset=utf-8\n");
-            builder.append("\n");
-            builder.append("Error occurred while parsing JSON response from GitHub API.");
-          } catch (Exception e) {
-            // Handle other exceptions
+
+            builder.append(stringBuilder.toString());
+
+          } catch (JSONException exception) {
             builder.append("HTTP/1.1 400 Bad Request\n");
             builder.append("Content-Type: text/html; charset=utf-8\n");
             builder.append("\n");
-            builder.append("Bad Request. Please provide a valid query.");
+            builder.append("Error: Wrong format. Please follow proper format" +
+                    ": host : PORT/github?query = users/amehlhase316/repos");
+          } catch (Exception exception) {
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error occurred. Please try again.");
           }
-
-
-
 
 
       /*

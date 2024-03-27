@@ -25,6 +25,10 @@ import java.util.Random;
 import java.util.Map;
 import java.util.LinkedHashMap;
 import java.nio.charset.Charset;
+import org.json.JSONObject;
+import org.json.JSONArray;
+import org.json.JSONException;
+
 
 class WebServer {
   public static void main(String args[]) {
@@ -33,6 +37,7 @@ class WebServer {
 
   /**
    * Main thread
+   *
    * @param port to listen on
    */
   public WebServer(int port) {
@@ -63,6 +68,7 @@ class WebServer {
         } catch (IOException e) {
           // TODO Auto-generated catch block
           e.printStackTrace();
+          System.out.println("Error closing server.");
         }
       }
     }
@@ -82,6 +88,7 @@ class WebServer {
 
   /**
    * Reads in socket stream and generates a response
+   *
    * @param inStream HTTP input stream from socket
    * @return the byte encoded HTTP response
    */
@@ -110,7 +117,7 @@ class WebServer {
         // find end of header("\n\n")
         if (line == null || line.equals(""))
           done = true;
-        // parse GET format ("GET <path> HTTP/1.1")
+          // parse GET format ("GET <path> HTTP/1.1")
         else if (line.startsWith("GET")) {
           int firstSpace = line.indexOf(" ");
           int secondSpace = line.indexOf(" ", firstSpace + 1);
@@ -194,30 +201,50 @@ class WebServer {
             builder.append("File not found: " + file);
           }
         } else if (request.contains("multiply?")) {
-          // This multiplies two numbers, there is NO error handling, so when
-          // wrong data is given this just crashes
 
-          Map<String, String> query_pairs = new LinkedHashMap<String, String>();
-          // extract path parameters
-          query_pairs = splitQuery(request.replace("multiply?", ""));
+          try {
 
-          // extract required fields from parameters
-          Integer num1 = Integer.parseInt(query_pairs.get("num1"));
-          Integer num2 = Integer.parseInt(query_pairs.get("num2"));
+            // This multiplies two numbers, there is NO error handling, so when
+            // wrong data is given this just crashes
 
-          // do math
-          Integer result = num1 * num2;
+            Map<String, String> query_pairs = new LinkedHashMap<String, String>();
+            // extract path parameters
+            query_pairs = splitQuery(request.replace("multiply?", ""));
 
-          // Generate response
-          builder.append("HTTP/1.1 200 OK\n");
-          builder.append("Content-Type: text/html; charset=utf-8\n");
-          builder.append("\n");
-          builder.append("Result is: " + result);
+            if (!query_pairs.containsKey("num1") || !query_pairs.containsKey("num2")) {
+              builder.append("HTTP/1.1 400 Bad Request\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Wrong Format! Please enter two integers. Ex. num1=_&num2=_");
+            } else {
 
-          // TODO: Include error handling here with a correct error code and
-          // a response that makes sense
+              // extract required fields from parameters
+              Integer num1 = Integer.parseInt(query_pairs.get("num1"));
+              Integer num2 = Integer.parseInt(query_pairs.get("num2"));
+
+              // do math
+              Integer result = num1 * num2;
+
+              // Generate response
+              builder.append("HTTP/1.1 200 OK\n");
+              builder.append("Content-Type: text/html; charset=utf-8\n");
+              builder.append("\n");
+              builder.append("Result is: " + result);
+            }
+
+            // TODO: Include error handling here with a correct error code and
+            // a response that makes sense
+          } catch (NumberFormatException exception) {
+            // If an
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Wrong Format! Please enter valid integers for multiplication");
+
+          }
 
         } else if (request.contains("github?")) {
+
           // pulls the query from the request and runs it with GitHub's REST API
           // check out https://docs.github.com/rest/reference/
           //
@@ -226,10 +253,60 @@ class WebServer {
           // "Owner's repo is named RepoName. Example: find RepoName's contributors" translates to
           //     "/repos/OWNERNAME/REPONAME/contributors"
 
-          Map<String, String> query_pairs = new LinkedHashMap<String, String>();
-          query_pairs = splitQuery(request.replace("github?", ""));
-          String json = fetchURL("https://api.github.com/" + query_pairs.get("query"));
-          System.out.println(json);
+
+          try {
+            // Extract the query from the request and fetch data from GitHub API
+            Map<String, String> query_pairs = new LinkedHashMap<String, String>();
+            query_pairs = splitQuery(request.replace("github?", ""));
+            String json = fetchURL("https://api.github.com/" + query_pairs.get("query"));
+            System.out.println(json);
+
+
+
+            // Parse JSON response
+            JSONArray reposArray = new JSONArray(json);
+
+            // Prepare response
+            StringBuilder responseBuilder = new StringBuilder();
+            responseBuilder.append("HTTP/1.1 200 OK\n");
+            responseBuilder.append("Content-Type: text/html; charset=utf-8\n");
+            responseBuilder.append("\n");
+
+            // Iterate through each repository and extract relevant information
+            for (int i = 0; i < reposArray.length(); i++) {
+              JSONObject repo = reposArray.getJSONObject(i);
+              String fullName = repo.getString("full_name");
+              int id = repo.getInt("id");
+              JSONObject owner = repo.getJSONObject("owner");
+              String ownerLogin = owner.getString("login");
+
+              // Append repository information to the response
+              responseBuilder.append("Repository: ").append(fullName).append("<br>");
+              responseBuilder.append("ID: ").append(id).append("<br>");
+              responseBuilder.append("Owner: ").append(ownerLogin).append("<br><br>");
+            }
+
+            // Send the response
+            builder.append(responseBuilder.toString());
+          } catch (JSONException e) {
+            // Handle JSON parsing error
+            builder.append("HTTP/1.1 500 Internal Server Error\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Error occurred while parsing JSON response from GitHub API.");
+          } catch (Exception e) {
+            // Handle other exceptions
+            builder.append("HTTP/1.1 400 Bad Request\n");
+            builder.append("Content-Type: text/html; charset=utf-8\n");
+            builder.append("\n");
+            builder.append("Bad Request. Please provide a valid query.");
+          }
+
+
+
+
+
+      /*
 
           builder.append("HTTP/1.1 200 OK\n");
           builder.append("Content-Type: text/html; charset=utf-8\n");
@@ -237,6 +314,11 @@ class WebServer {
           builder.append("Check the todos mentioned in the Java source file");
           // TODO: Parse the JSON returned by your fetch and create an appropriate
           // response based on what the assignment document asks for
+
+
+       */
+
+
 
         } else {
           // if the request is not recognized at all
@@ -255,8 +337,11 @@ class WebServer {
       response = ("<html>ERROR: " + e.getMessage() + "</html>").getBytes();
     }
 
+
     return response;
   }
+
+
 
   /**
    * Method to read in a query and split it up correctly
